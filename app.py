@@ -1,87 +1,53 @@
-import os
-from typing import Annotated, List, TypedDict
+from typing import Dict, List, Tuple
 
-from dotenv import load_dotenv
+import gradio as gr
 from langchain_core.messages import AIMessage, HumanMessage
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
-from langgraph.graph import END, StateGraph
 
-load_dotenv()
+from agents import TripState, agent
 
-# Define Agent State
-class PlannerState(TypedDict):
-    messages: Annotated[List[HumanMessage | AIMessage], "The messages in the conversation"]
-    city: str
-    interests: List[str]
-    itinerary: str
 
-llm = ChatOpenAI(model=os.getenv("OPENAI_MODEL"), api_key=os.getenv('OPENAI_API_KEY'))
+def create_initial_state():
+    return TripState(messages=[], location=None, interests=None, plan=None)
 
-itinerary_prompt = ChatPromptTemplate.from_messages([
-    ("system", "You are a helpful travel assistant. Create a day trip itinerary for {city} based on the user's interests: {interests}. Provide a brief, bulleted itinerary."),
-    ("human", "Create an itinerary for my day trip."),
-])
+current_state = create_initial_state()
 
-# Define Agent Functions
-def input_city(state: PlannerState) -> PlannerState:
-    print("Please enter the city you want to visit for your day trip:")
-    user_message = input("Your input: ")
-    return {
-        **state,
-        "city": user_message,
-        "messages": state['messages'] + [HumanMessage(content=user_message)],
-    }
 
-def input_interests(state: PlannerState) -> PlannerState:
-    print(f"Please enter your interests for the trip to {state['city']} (comma-separated):")
-    user_message = input("Your input: ")
-    return {
-        **state,
-        "interests": [interest.strip() for interest in user_message.split(',')],
-        "messages": state['messages'] + [HumanMessage(content=user_message)],
-    }
+def predict(message: str, history: List[Dict[str, str]]) -> Tuple[str, TripState]:
+    global current_state
 
-def create_itinerary(state: PlannerState) -> PlannerState:
-    print(f"Creating an itinerary for {state['city']} based on interests: {', '.join(state['interests'])}...")
-    response = llm.invoke(itinerary_prompt.format_messages(city=state['city'], interests=", ".join(state['interests'])))
-    print("\nFinal Itinerary:")
-    print(response.content)
-    return {
-        **state,
-        "messages": state['messages'] + [AIMessage(content=response.content)],
-        "itinerary": response.content,
-    }
+    current_state["messages"].append(HumanMessage(content=message))
+    result_state = agent.invoke(current_state)
 
-# Create and Compile the Graph
-workflow = StateGraph(PlannerState)
+    bot_message = ""
+    # Find the last AI message to display
+    for msg in reversed(result_state["messages"]):
+        if isinstance(msg, AIMessage):
+            bot_message = msg.content
+            break
 
-workflow.add_node("input_city", input_city)
-workflow.add_node("input_interests", input_interests)
-workflow.add_node("create_itinerary", create_itinerary)
+    # If a plan was generated, the conversation is over. Reset state.
+    if result_state.get("plan"):
+        current_state = create_initial_state()
+    else:
+        # Update the state for the next turn
+        current_state = result_state
 
-workflow.set_entry_point("input_city")
+    return bot_message
 
-workflow.add_edge("input_city", "input_interests")
-workflow.add_edge("input_interests", "create_itinerary")
-workflow.add_edge("create_itinerary", END)
 
-app = workflow.compile()
+with gr.Blocks() as demo:
+    chat_interface = gr.ChatInterface(
+        fn=predict,
+        title="Trip Planner Agent",
+        description="Ask me to plan a trip. I'll ask you about your destination and interests.",
+        examples=[
+            ["Hi, I want to plan a trip."],
+            ["I want to go to Paris."],
+            ["I'm interested in museums and food."],
+            ["Plan a 3-day trip to Tokyo for a foodie."]
+        ],
+        type="messages",
+    )
 
-# Define the function that runs the graph
-def run_travel_planner(user_request: str):
-    print(f"Initial Request: {user_request}\n")
-    state = {
-        "messages": [HumanMessage(content=user_request)],
-        "city": "",
-        "interests": [],
-        "itinerary": "",
-    }
-
-    for output in app.stream(state):
-        pass  # The nodes themselves now handle all printing
-
-# Main execution block
 if __name__ == "__main__":
-    user_request = "I want to plan a day trip."
-    run_travel_planner(user_request)
+    demo.launch()
