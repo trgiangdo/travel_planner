@@ -1,0 +1,49 @@
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors
+    "F",  # pyflakes errors
+    "W",  # pycodestyle warnings
+    "C",  # mccabe complexity checker
+    "B",  # bugbear best practices checker
+    "T",  # mypy type errors
+    "B",  # flake8-bugbear best practices checker
+    "I001",  # isort import order
+]
+ignore = []
+
+# Allow fix for all enabled rules (when `--fix`) is provided.
+fixable = ["ALL"]
+unfixable = []
+
+[tool.ruff]
+exclude = [
+    ".git",
+    "__pycache__",
+    "setup.py",
+    "build",
+    "dist",
+    "releases",
+    ".venv",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".vscode",
+]
+line-length = 120
+indent-width = 4
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "F403"]  # unused import
+"tests/*" = ["T201", "T203"]  # ignore print statements in tests
+
+[tool.mypy]
+exclude = [".venv"]
+
+[project]
+name = "travel-planner"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "langchain-openai>=0.3.28",
+    "langgraph>=0.5.3",
+    "python-dotenv>=1.1.1",
+]
