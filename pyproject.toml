@@ -49,3 +49,8 @@ dependencies = [
     "langgraph>=0.5.3",
     "python-dotenv>=1.1.1",
 ]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.12.3",
+]
